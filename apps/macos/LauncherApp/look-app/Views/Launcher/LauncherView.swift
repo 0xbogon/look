@@ -876,11 +876,10 @@ struct LauncherView: View {
     var body: some View {
         // Mirrored onto the window's layers in `WindowConfigurator`.
         let windowCornerRadius = themeStore.panelRadius
-        // When floating, use a single uniform gap between the top row and the
-        // columns so it matches the horizontal gap between the columns (i3 style);
-        // otherwise keep the classic fixed spacing.
-        let contentSpacing: CGFloat = showsFloatingCards ? innerGap : (isCommandMode ? 8 : 12)
-        let contentPadding: CGFloat = isCommandMode ? 10 : 14
+        // Floating: one uniform gap everywhere (i3 style). Seated: 0, so the bar
+        // and the results meet at the divider; siblings that need air take
+        // `stackedContentGap`.
+        let contentSpacing: CGFloat = showsFloatingCards ? innerGap : 0
 
         // Running apps render inside the search bar (see panelContent), not as a
         // floating strip that grows the window. The launcher is always a single
@@ -1273,9 +1272,9 @@ struct LauncherView: View {
             VStack(alignment: .leading, spacing: contentSpacing) {
                 panelContent
             }
-            // Tighter top inset so the search bar sits closer to the window's
-            // top edge; keep the original padding on the other three sides.
-            .padding(.top, max(4, contentPadding - 8))
+            // Flush: the bar is the window's top edge, or the backdrop paints
+            // above it on the first keystroke. Screens without it keep the inset.
+            .padding(.top, showsTopRowBar ? 0 : max(4, contentPadding - 8))
             .padding(.horizontal, contentPadding)
             .padding(.bottom, contentPadding)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
@@ -1329,7 +1328,7 @@ struct LauncherView: View {
         if appUIState.showsThemeSettings {
             ThemeSettingsView(settings: $themeStore.settings)
         } else {
-            if !isCommandMode && !showsHelpScreen {
+            if showsTopRowBar {
                 // The search field and running-apps icons always share one
                 // background so they read as a single unified bar: a frosted
                 // tile when floating, the classic rounded fill otherwise. The
@@ -1439,11 +1438,16 @@ struct LauncherView: View {
                         themeStore: themeStore,
                         revealToken: appearanceRevealToken
                     )
+                    // Two floating tiles: they must not touch.
+                    .padding(.top, stackedContentGap)
+                    // Same edges as the bar above it.
+                    .padding(.horizontal, showsFloatingCards ? 0 : -contentPadding)
                 }
                 Spacer(minLength: 0)
             } else {
                 if let fileRecallNote {
                     fileRecallNoteLine(fileRecallNote)
+                        .padding(.top, stackedContentGap)
                 }
                 resultsRow
             }
@@ -1463,6 +1467,7 @@ struct LauncherView: View {
                 && !isHideAppConfirmationVisible
             {
                 HintBar(hint: panelHint, todo: todoQuickView, themeStore: themeStore)
+                    .padding(.top, stackedContentGap)
             }
         }
     }
@@ -1495,6 +1500,8 @@ struct LauncherView: View {
         .padding(.vertical, 6)
         .background(bannerStyle.background, in: Capsule())
         .transition(.move(edge: .top).combined(with: .opacity))
+        // Sits between the bar and the results, so it takes a seam on both sides.
+        .padding(.vertical, stackedContentGap)
     }
 
     @ViewBuilder
@@ -2341,6 +2348,15 @@ struct LauncherView: View {
         }
     }
 
+    /// The seam the panel stack no longer gives every child, for the ones that
+    /// still need it. Zero while floating: `innerGap` is already the gap there.
+    private var stackedContentGap: CGFloat {
+        showsFloatingCards ? 0 : (isCommandMode ? 8 : 12)
+    }
+
+    /// The panel's inset from the window edge; the top bar bleeds back over it.
+    private var contentPadding: CGFloat { isCommandMode ? 10 : 14 }
+
     /// i3-style inner gap between the three home panes (0 = classic flat layout).
     private var innerGap: CGFloat { CGFloat(themeStore.settings.innerGap) }
     private var usesPanes: Bool { innerGap > 0 }
@@ -2378,6 +2394,11 @@ struct LauncherView: View {
     /// it stays legible on the bare desktop.
     private var barFloatsFree: Bool {
         showsFloatingCards || restsAsBareBar
+    }
+
+    /// The search bar is the panel's first row, so it owns the window's top edge.
+    private var showsTopRowBar: Bool {
+        !appUIState.showsThemeSettings && !isCommandMode && !showsHelpScreen
     }
 
     /// The empty-query rest state as drawn: just the bar. The AI session starts
@@ -2491,25 +2512,44 @@ struct LauncherView: View {
         // focus when the bar flips between the classic fill and the frosted tile
         // (e.g. typing the first character out of the empty-rest state at gap 0).
         let floats = barFloatsFree
+        // Gap 0: the bar is the window's header. It bleeds over the panel's
+        // inset and takes it as padding, so nothing shifts; resting like that it
+        // is the window, so it wears the window's radius and nothing lifts it.
+        let spansWindow = !showsFloatingCards
+        let barRadius = spansWindow ? themeStore.panelRadius : themeStore.tileRadius
+        let lifts = floats && !spansWindow
         return content()
             // Wraps the content, not the chrome: the reveal leaves an opacity
             // in the tree, which would rasterize the backdrop below.
             .spawnReveal(index: Self.searchBarRevealIndex, token: appearanceRevealToken, scales: false)
+            .padding(.horizontal, spansWindow ? contentPadding : 0)
             .background {
-                tileBackground(
-                    cornerRadius: floats ? themeStore.tileRadius : themeStore.barRadius,
-                    floats: floats,
-                    // Seated, the panel's backdrop already backs the bar.
-                    substrate: floats
-                )
+                // Seated, the panel's backdrop already backs the bar; a fill of
+                // its own is what made it read as a separate window.
+                if floats {
+                    tileBackground(
+                        cornerRadius: barRadius,
+                        floats: true,
+                        substrate: true
+                    )
+                }
             }
             .overlay {
                 if floats {
-                    tileBorder(cornerRadius: themeStore.tileRadius)
+                    tileBorder(cornerRadius: barRadius)
                 }
             }
-            .shadow(color: floats ? .black.opacity(0.25) : .clear,
-                    radius: floats ? 7 : 0, x: 0, y: floats ? 3 : 0)
+            .overlay(alignment: .bottom) {
+                // The rows' own hairline, once the bar has no edge of its own.
+                if !floats {
+                    Rectangle()
+                        .fill(themeStore.dividerColor())
+                        .frame(height: 1)
+                }
+            }
+            .padding(.horizontal, spansWindow ? -contentPadding : 0)
+            .shadow(color: lifts ? .black.opacity(0.25) : .clear,
+                    radius: lifts ? 7 : 0, x: 0, y: lifts ? 3 : 0)
     }
 
     /// Wraps a single-panel home state (translation, AI session, recent empty) in
