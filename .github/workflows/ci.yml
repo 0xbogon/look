@@ -209,6 +209,32 @@ jobs:
       - name: Test (ffi crate)
         run: cargo test --manifest-path bridge/ffi/Cargo.toml
 
+  rust-cross-x86_64:
+    name: rust-cross x86_64-apple-darwin
+    runs-on: macos-latest
+    needs: changes
+    if: needs.changes.outputs.rust == 'true'
+    # The release app is universal (arm64 + x86_64); this job is the guard
+    # that a Rust change still cross-compiles for the Intel slice.
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-apple-darwin
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+
+      - name: Build (core workspace, x86_64-apple-darwin)
+        run: cargo build --target x86_64-apple-darwin --workspace --manifest-path core/Cargo.toml
+
+      - name: Build (ffi crate, x86_64-apple-darwin)
+        run: cargo build --target x86_64-apple-darwin --manifest-path bridge/ffi/Cargo.toml
+
   build:
     name: build
     runs-on: ubuntu-latest
@@ -261,6 +287,9 @@ jobs:
 
       - name: Build Look app (Debug)
         run: xcodebuild -project "apps/macos/LauncherApp/look-app.xcodeproj" -scheme "Look" -configuration Debug -destination "platform=macOS" build
+
+      - name: Build Swift package for x86_64
+        run: cd apps/macos/LauncherApp && swift build --arch x86_64
 
   linows-js-test:
     name: Test linows (JS)

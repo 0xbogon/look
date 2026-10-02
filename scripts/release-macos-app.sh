@@ -22,15 +22,28 @@ echo "[1/4] Cleaning previous release artifacts"
 rm -rf "$BUILD_DIR"
 mkdir -p "$BUILD_DIR" "$OUT_DIR"
 
+# ARCHS override: ARCHS=x86_64 ./scripts/release-macos-app.sh 0.1.1 → single-arch
+# release. The Rust FFI phase follows $ARCHS, so the .a matches automatically.
+if [[ -n "${ARCHS:-}" ]]; then
+  ARCHS_FLAG=(ARCHS="$ARCHS")
+else
+  ARCHS_FLAG=()
+fi
+
 echo "[2/4] Building macOS app ($CONFIGURATION)"
+# -destination "generic/platform=macOS" = "Any Mac": builds every arch in ARCHS
+# (arm64 + x86_64). Omitting it lets xcodebuild auto-pick a destination, and on
+# a dev Mac that is the concrete "My Mac" machine (arch:arm64), which silently
+# collapses the build to a single arch despite ARCHS = "arm64 x86_64".
 xcodebuild \
   -project "$APP_DIR/look-app.xcodeproj" \
   -scheme "$SCHEME" \
   -configuration "$CONFIGURATION" \
+  -destination "generic/platform=macOS" \
   -derivedDataPath "$DERIVED_DATA" \
   MARKETING_VERSION="$VERSION" \
   CURRENT_PROJECT_VERSION="$VERSION" \
-  build >/dev/null
+  build ${ARCHS_FLAG[@]+"${ARCHS_FLAG[@]}"} >/dev/null
 
 if [[ ! -d "$APP_PATH" ]]; then
   echo "Build succeeded but app bundle not found at: $APP_PATH" >&2
