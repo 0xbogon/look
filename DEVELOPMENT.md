@@ -41,7 +41,7 @@ Guide for building Look locally and contributing to the project.
 
 Common:
 
-- Rust stable toolchain (for the core engine and FFI bridge)
+- Rust stable toolchain (for the core engine), plus the **nightly** toolchain — the macOS "Build Rust FFI" phase builds with `cargo +nightly`, and rustup tracks targets per toolchain (`rustup target add x86_64-apple-darwin --toolchain nightly` if a slice build fails with "target may not be installed")
 - GNU Make (top-level `Makefile` dispatches to `scripts/Makefile.mac` or `scripts/Makefile.win` based on host OS)
 
 macOS:
@@ -73,6 +73,30 @@ FFI bridge checks:
 cd bridge/ffi
 cargo check
 cargo test
+```
+
+macOS cross-compile (universal app, Intel + Apple Silicon):
+
+The Xcode "Build Rust FFI" phase (`apps/macos/LauncherApp/build-rust-ffi.sh`) builds the ffi crate per architecture and `lipo`s the fat `liblook_ffi.a`; release builds compile `aarch64-apple-darwin` + `x86_64-apple-darwin`, debug builds only the host arch (`ONLY_ACTIVE_ARCH`). Both apple-darwin slices are first-class targets of the macOS SDK, so no extra toolchain is needed. Standalone targets:
+
+```bash
+make core-build-x86_64    # core workspace for x86_64-apple-darwin (release)
+make ffi-build-x86_64     # ffi crate for x86_64-apple-darwin (release)
+make swift-build-x86_64   # LauncherLogic Swift package for x86_64 (swift build --arch)
+```
+
+**Architecture controls.** Release is universal by default (`ARCHS = "arm64 x86_64"` on the Look target). `release-macos-app.sh` pins `-destination "generic/platform=macOS"` ("Any Mac") — without it, `xcodebuild` on a dev Mac auto-picks the concrete "My Mac" destination and silently collapses the build to one arch despite `ARCHS`. A single-arch release is a first-class knob; the Rust phase follows `$ARCHS` automatically:
+
+```bash
+ARCHS=x86_64 ./scripts/release-macos-app.sh 0.1.1
+```
+
+Verify any release binary with `lipo -archs .../Look.app/Contents/MacOS/Look` (expect `arm64 x86_64`); release CI enforces the same check before publishing.
+
+**FFI phase sandboxing.** The Look target sets `ENABLE_USER_SCRIPT_SANDBOXING = NO`: Xcode's user-script sandbox refuses to read repo files (it even denies reading the phase script itself), so cargo cannot run sandboxed. The FFI phase is the only shell phase in the project, so the opt-out is scoped to it. If the phase logs `using existing RustBuild/liblook_ffi.a` during an `xcodebuild` run, the fallback path was taken — find the real cargo error by running the phase standalone:
+
+```bash
+cd apps/macos/LauncherApp && ARCHS="arm64 x86_64" ONLY_ACTIVE_ARCH=NO CONFIGURATION=Release PROJECT_DIR="$PWD" ./build-rust-ffi.sh
 ```
 
 Linows (Tauri) dev run: `cd apps/linows && cargo tauri dev` (release: `cargo tauri build`; on NixOS prefix with `nix develop -c`). Per-distro and Windows `vcvars` specifics are in [apps/linows/BUILDING.md](apps/linows/BUILDING.md).

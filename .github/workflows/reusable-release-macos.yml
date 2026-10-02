@@ -115,6 +115,25 @@ jobs:
       - name: Build release zip + manifest
         run: ./scripts/build-release.sh "${{ steps.version.outputs.version }}"
 
+      - name: Verify universal (arm64 + x86_64) release
+        run: |
+          # The app links the Rust FFI static lib with -force_load, so a
+          # missing slice in either artifact would have failed the link;
+          # this asserts the release is really universal, not just lucky.
+          APP_BIN=".build/release-macos/DerivedData/Build/Products/Release/Look.app/Contents/MacOS/Look"
+          FFI_LIB="apps/macos/LauncherApp/RustBuild/liblook_ffi.a"
+
+          for path in "$APP_BIN" "$FFI_LIB"; do
+            archs="$(lipo -archs "$path")"
+            echo "$path: $archs"
+            for want in arm64 x86_64; do
+              case " $archs " in
+                *" $want "*) ;;
+                *) echo "missing slice $want in $path (got: $archs)" >&2; exit 1 ;;
+              esac
+            done
+          done
+
       - name: Configure macOS signing keychain (optional)
         env:
           APPLE_DEVELOPER_ID_CERT_BASE64: ${{ secrets.APPLE_DEVELOPER_ID_CERT_BASE64 }}
