@@ -43,14 +43,11 @@ fi
 
 export MACOSX_DEPLOYMENT_TARGET="${MACOSX_DEPLOYMENT_TARGET:-15.0}"
 
-# Debug (ONLY_ACTIVE_ARCH=YES) builds only the host arch so the dev loop
-# stays fast and matches the single-arch bundle Xcode links. Release builds
-# every arch Xcode will link, so the resulting .a is universal.
-if [ "${ONLY_ACTIVE_ARCH:-NO}" = "YES" ]; then
-  BUILD_ARCHS="$(uname -m)"
-else
-  BUILD_ARCHS="$ARCHS"
-fi
+# Slices = the architectures Xcode will link. Always build every $ARCHS:
+# Debug sets ONLY_ACTIVE_ARCH=YES, but for a generic destination Xcode ignores
+# it and links every ARCHS — a single uname -m slice would then fail the link.
+# The extra slice is harmless (cargo is incremental); a missing slice is not.
+BUILD_ARCHS="$ARCHS"
 
 triple_for() {
   case "$1" in
@@ -95,8 +92,15 @@ build_slicing() {
 if build_slicing; then
   echo "Rust FFI built for: $BUILD_ARCHS"
 else
-  # Original phase behavior: a Rust failure warns and reuses the last built
-  # library so a Swift-only iteration is not blocked by a broken Rust toolchain.
+  if [ "$PROFILE" = "release" ]; then
+    # Never ship a Release build on a stale archive: a failed slice build would
+    # otherwise fall back to the previous fat liblook_ffi.a, and the arch check
+    # would still pass with old Rust code packaged.
+    echo "error: Rust FFI build failed for a Release build; refusing to reuse an existing archive" >&2
+    exit 1
+  fi
+  # Debug: a Rust failure warns and reuses the last built library so a
+  # Swift-only iteration is not blocked by a broken Rust toolchain.
   echo "warning: Rust build skipped; using existing RustBuild/liblook_ffi.a"
   if [ ! -f "$OUT_LIB" ]; then
     echo "error: missing fallback RustBuild/liblook_ffi.a"

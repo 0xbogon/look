@@ -77,7 +77,7 @@ cargo test
 
 macOS cross-compile (universal app, Intel + Apple Silicon):
 
-The Xcode "Build Rust FFI" phase (`apps/macos/LauncherApp/build-rust-ffi.sh`) builds the ffi crate per architecture and `lipo`s the fat `liblook_ffi.a`; release builds compile `aarch64-apple-darwin` + `x86_64-apple-darwin`, debug builds only the host arch (`ONLY_ACTIVE_ARCH`). Both apple-darwin slices are first-class targets of the macOS SDK, so no extra toolchain is needed. Standalone targets:
+The Xcode "Build Rust FFI" phase (`apps/macos/LauncherApp/build-rust-ffi.sh`) builds the ffi crate per architecture and `lipo`s the fat `liblook_ffi.a`; it always builds every `$ARCHS` slice (release: `aarch64-apple-darwin` + `x86_64-apple-darwin`, debug: same — the extra slice is a cached no-op, and Debug's `ONLY_ACTIVE_ARCH` is ignored by Xcode for generic destinations anyway). Both apple-darwin slices are first-class targets of the macOS SDK, so no extra toolchain is needed. Standalone targets:
 
 ```bash
 make core-build-x86_64    # core workspace for x86_64-apple-darwin (release)
@@ -85,7 +85,7 @@ make ffi-build-x86_64     # ffi crate for x86_64-apple-darwin (release)
 make swift-build-x86_64   # LauncherLogic Swift package for x86_64 (swift build --arch)
 ```
 
-**Architecture controls.** Release is universal by default (`ARCHS = "arm64 x86_64"` on the Look target). `release-macos-app.sh` pins `-destination "generic/platform=macOS"` ("Any Mac") — without it, `xcodebuild` on a dev Mac auto-picks the concrete "My Mac" destination and silently collapses the build to one arch despite `ARCHS`. A single-arch release is a first-class knob; the Rust phase follows `$ARCHS` automatically:
+**Architecture controls.** Release is universal by default (`ARCHS = "arm64 x86_64"` on the Look target); the FFI phase always builds every `$ARCHS` slice, so a single-arch Debug app (your Mac's native arch, `ONLY_ACTIVE_ARCH = YES`) links against a universal `.a`. `release-macos-app.sh` pins `-destination "generic/platform=macOS"` ("Any Mac") — without it, `xcodebuild` on a dev Mac auto-picks the concrete "My Mac" destination and silently collapses the build to one arch despite `ARCHS`. A single-arch release is a first-class knob; the Rust phase follows `$ARCHS` automatically:
 
 ```bash
 ARCHS=x86_64 ./scripts/release-macos-app.sh 0.1.1
