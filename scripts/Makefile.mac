@@ -44,7 +44,7 @@ REAL_DB_PATH := $(HOME)/Library/Application Support/look/look.db
 DEV_CONFIG_PATH ?= $(HOME)/.look/config.dev
 DEV_OPEN_ENV = env -u LOOK_DB_PATH LOOK_CONFIG_PATH="$(DEV_CONFIG_PATH)" LOOK_DEV_HINT=1 LOOK_LOG_LEVEL=debug LOOK_UI_DEBUG_EVENTS=1
 
-.PHONY: help core-check ffi-check ffi-build ffi-build-release core-build-x86_64 ffi-build-x86_64 swift-build-x86_64 ffi-unstale app-build app-ensure-bundle app-stop app-run app-install-dev app-run-dev app-uninstall-dev dev-cli app-logs app-logs-all symbols db-path db-status db-shell db-reset db-refresh
+.PHONY: help core-check ffi-check ffi-build ffi-build-release core-build-x86_64 ffi-build-x86_64 ffi-unstale app-build app-ensure-bundle app-stop app-run app-install-dev app-run-dev app-uninstall-dev dev-cli app-logs app-logs-all symbols db-path db-status db-shell db-reset db-refresh
 
 help:
 	@printf "look developer tasks\n\n"
@@ -55,7 +55,6 @@ help:
 	@printf "  make ffi-build-release  - same, release profile\n"
 	@printf "  make core-build-x86_64   - build core workspace for x86_64-apple-darwin (release)\n"
 	@printf "  make ffi-build-x86_64    - build ffi crate for x86_64-apple-darwin (release)\n"
-	@printf "  make swift-build-x86_64  - build LauncherLogic Swift package for x86_64\n"
 	@printf "  make app-build          - xcodebuild app (macOS, includes rust ffi build/link)\n"
 	@printf "  make ffi-unstale        - drop RustBuild/liblook_ffi.a when the Rust build identity changes\n"
 	@printf "  make symbols            - verify ffi symbols in app binary\n\n"
@@ -97,9 +96,6 @@ core-build-x86_64:
 
 ffi-build-x86_64:
 	cargo build --release --target x86_64-apple-darwin --manifest-path bridge/ffi/Cargo.toml
-
-swift-build-x86_64:
-	cd apps/macos/LauncherApp && swift build --arch x86_64
 
 ffi-unstale:
 	@identity="$(XCODE_CONFIG) $$(find $(RUST_SOURCE_DIRS) \
