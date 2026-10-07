@@ -7,6 +7,8 @@
 
 ARCHS="${ARCHS:-arm64}"
 
+# shellcheck disable=SC2034  # consumed by the scripts that source this file
+
 case "$ARCHS" in
   arm64) ARCH_SUFFIX="" ;;
   x86_64) ARCH_SUFFIX="-x86_64" ;;

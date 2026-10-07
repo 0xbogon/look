@@ -233,13 +233,20 @@ Benchmark snapshots land under [docs/bench-notes/](docs/bench-notes/). Add a new
 
 ## Releasing (maintainers)
 
-Build release artifacts:
+Build release artifacts. Each call produces one architecture; release CI runs
+both in parallel:
 
 ```bash
-./scripts/build-release.sh 1.0.0
+./scripts/build-release.sh 1.0.0                # arm64
+ARCHS=x86_64 ./scripts/build-release.sh 1.0.0   # Intel
 ```
 
 The Homebrew cask lives in [homebrew/cask](https://github.com/Homebrew/homebrew-cask/blob/main/Casks/l/look.rb). BrewTestBot bumps it automatically after a GitHub release; if it misses one, run `brew bump-cask-pr --version <version> look`. Other changes (artifact names, minimum macOS, zap paths) need a regular pull request editing the cask.
+
+The cask currently has a single `url` and `sha256` pointing at the arm64 asset,
+so Intel users who run `brew install --cask look` get an arm64 build that
+cannot launch. Serving them needs `on_arm` and `on_intel` stanzas, which is a
+manual cask pull request; BrewTestBot's auto-bump keeps working afterwards.
 
 Signing and notarization:
 
